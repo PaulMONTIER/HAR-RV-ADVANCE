@@ -1,145 +1,100 @@
 # HAR-RV Boosted
 
-> **Extended HAR-RV Model for Volatility Forecasting**
+> **Extending the HAR-RV Model with XGBoost for Realized Volatility Forecasting**
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange.svg)](HAR_RV_Tutorial.ipynb)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-This project implements an **extended HAR-RV (Heterogeneous Autoregressive Realized Volatility)** model for predicting stock volatility. The model builds upon Corsi (2009) by adding:
+This project extends the classic HAR-RV model (Corsi, 2009) by replacing the linear regression with **XGBoost** and enriching the feature set from 5 to **20 predictors** across 5 categories. The model predicts 5-day-ahead realized volatility for S&P 500 large-cap stocks using 1-minute intraday data.
 
-- **Long Memory**: Quarterly RV (60 days) for trend persistence
-- **Asymmetry**: Semi-variance to capture leverage effect
-- **Jumps**: Decomposition of continuous/discontinuous volatility
-- **Implied Volatility**: VIX integration for market sentiment
+The full methodology and results are documented in:
+- **[Research Notebook](notebook_research.ipynb)** --- step-by-step walkthrough of the research process
+- **[Academic Paper](har_rv_model_paper.pdf)** --- formal write-up (French, working paper format)
 
-## Performance
+## Key Results
 
-| Metric | Value |
-|--------|-------|
-| **Hit Rate** | 64% (vs 50% random) |
-| **Information Coefficient** | 0.39 |
-| **Sharpe Ratio** | 4.6 |
-| **Profitable Stocks** | 14/14 (100%) |
+Evaluated on 5 stocks (AAPL, MSFT, NVDA, JPM, META) with walk-forward backtesting and purging:
 
-## Model Formula
+| Configuration | Spearman IC | vs. Baseline |
+|---------------|:-----------:|:------------:|
+| Baseline (HAR-RV features, corrections applied) | 0.291 | --- |
+| + Higher moments (RSkew, RKurt, Jump ratio) | 0.310 | +6.5% |
+| + VIX-adaptive training window | 0.331 | +13.7% |
+| + Leverage features (Ret_w, Leverage_22d) | **0.394** | **+35.4%** |
 
-```
-RV_{t+5} = β₀ + β₁·RV_m + β₂·RV_q + β₃·RV_neg_w + β₄·J_w + β₅·VIX + ε
-```
+## Features
 
-| Variable | Definition | Window |
-|----------|------------|--------|
-| `RV_m` | Monthly Realized Volatility | 22 days |
-| `RV_q` | Quarterly Realized Volatility | 60 days |
-| `RV_neg_w` | Negative Semi-variance | 5 days |
-| `J_w` | Jump Component | 5 days |
-| `VIX` | CBOE Volatility Index | Lagged 1 day |
+20 predictors organized in 5 categories:
 
-## Quick Start
-
-### Installation
-
-```bash
-pip install numpy pandas yfinance scikit-learn scipy matplotlib
-```
-
-### Usage
-
-```python
-from har_rv_model import HARRVModel
-
-# Initialize model
-model = HARRVModel(horizon=5, train_window=252)
-
-# Get VIX data
-vix = model.get_vix()
-
-# Run backtest on a stock
-result = model.backtest('AAPL', vix)
-
-print(f"Hit Rate: {result['hit_rate']:.1%}")
-print(f"IC: {result['ic']:.3f}")
-```
-
-### Run Demo
-
-```bash
-python har_rv_model.py
-```
+| Category | Features | Reference |
+|----------|----------|-----------|
+| **HAR-RV core** | RV_d, RV_w, RV_m, RV_q | Corsi (2009) |
+| **Asymmetry** | RV_neg_w, RV_pos_w, RV_asym_w | Barndorff-Nielsen & Shephard (2004) |
+| **Jumps & moments** | J_w, J_ratio_w, RSkew_w, RKurt_w | Andersen et al. (2007), Amaya et al. (2015) |
+| **Market regime** | VIX, VIX_ret_5d, VIX_level | CBOE |
+| **Leverage & ratios** | Ret_w, Leverage_22d, RV_ratio_wm, RV_ratio_wq, RV_trend_5d, RV_change_1d | Black (1976) |
 
 ## Project Structure
 
 ```
 HAR-RV-boosted/
-├── har_rv_model.py          # Main model implementation
-├── HAR_RV_Tutorial.ipynb    # Theoretical notebook
-├── requirements.txt         # Dependencies
-├── results/                 # Backtest results & charts
-│   ├── backtest_results.png
-│   ├── temporal_heatmap.png
-│   └── temporal_stability.png
+├── har_rv_model.py           # Main model (features, target, backtest, XGBoost)
+├── notebook_research.ipynb   # Research notebook (complementary to the paper)
+├── har_rv_model_paper.pdf    # Academic paper (compiled PDF)
+├── requirements.txt          # Python dependencies
+├── .env.example              # API keys template
 └── README.md
 ```
 
-## Results
+## Quick Start
 
-### Backtest Performance by Stock
+### 1. Install dependencies
 
-![Backtest Results](results/backtest_results.png)
+```bash
+pip install -r requirements.txt
+```
 
-### Temporal Stability (Quarterly)
+### 2. Run the model
 
-![Temporal Heatmap](results/temporal_heatmap.png)
+```python
+from har_rv_model import HARRVModel
 
-### Model Stability Over Time
+model = HARRVModel(horizon=5, train_window=252)
+vix = model.get_vix()
+result = model.backtest('AAPL', vix)
 
-![Temporal Stability](results/temporal_stability.png)
+print(f"IC: {result['ic']:.3f}")
+print(f"Hit Rate: {result['hit_rate']:.1%}")
+```
 
-## Validation
+Or run the full backtest:
 
-The model passed rigorous validation tests:
+```bash
+python har_rv_model.py
+```
 
-| Test | Result | Status |
-|------|--------|--------|
-| Look-Ahead Bias | VIX lagged +1 day | ✅ Passed |
-| Survivorship Bias | 14/14 stocks profitable | ✅ Passed |
-| Shift Test | 63.6% (volatility persistence) | ⚠️ Expected |
-| Randomize Test | 52.5% (VIX signal) | ⚠️ Expected |
+## Methodology Highlights
 
-## Theory
-
-The HAR-RV model is based on the **Heterogeneous Market Hypothesis** (Müller et al., 1997):
-
-> Markets consist of heterogeneous agents operating on different time horizons.
-
-| Agent | Horizon | Behavior |
-|-------|---------|----------|
-| Day Traders | Daily | News reaction, short-term momentum |
-| Active Investors | Weekly | Rebalancing, technical patterns |
-| Institutionals | Monthly+ | Macro view, strategic allocation |
-
-For detailed theory, see the [Tutorial Notebook](HAR_RV_Tutorial.ipynb).
+- **Target**: log(RV_{t+5} / RV_m) --- relative volatility change, decoupled from features
+- **Walk-forward**: expanding window with purge gap of 4 days (avoids target overlap)
+- **Adaptive window**: training window size interpolated between 189--504 days based on VIX regime
+- **Evaluation**: Spearman Information Coefficient (rank correlation between predictions and realized values)
 
 ## References
 
-- **Corsi, F. (2009)**. A Simple Approximate Long-Memory Model of Realized Volatility. *Journal of Financial Econometrics*, 7(2), 174-196.
+- Corsi, F. (2009). *A Simple Approximate Long-Memory Model of Realized Volatility.* Journal of Financial Econometrics, 7(2), 174--196.
+- Andersen, T. G., Bollerslev, T., & Diebold, F. X. (2007). *Roughing it up.* Review of Economics and Statistics, 89(4), 701--720.
+- Barndorff-Nielsen, O. E., & Shephard, N. (2004). *Power and bipower variation.* Econometrica, 72(3), 885--925.
+- Black, F. (1976). *Studies of stock price volatility changes.* Proceedings of the ASA.
+- Amaya, D., et al. (2015). *Does realized skewness and kurtosis predict the cross-section of equity returns?* Journal of Financial Economics, 118(1), 135--167.
 
-- **Andersen, T. G., Bollerslev, T., & Diebold, F. X. (2007)**. Roughing it up: Including jump components in measuring realized volatility. *Review of Economics and Statistics*, 89(4), 701-720.
+## Author
 
-- **Müller, U. A., et al. (1997)**. Volatilities of different time resolutions. *Journal of Empirical Finance*, 4(2-3), 213-239.
+**Paul MONTIER**
+M2 AQTC --- 2025
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) for details.
-
-## 👤 Author
-
-**Paul MONTIER**  
-243765035+PaulMONTIER@users.noreply.github.com
-
----
-
-If you find this project useful, please give it a star!
+MIT License

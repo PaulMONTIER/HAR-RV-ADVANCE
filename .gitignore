@@ -24,6 +24,7 @@ Thumbs.db
 
 # Data cache
 data_cache/
+data/
 
 # Environment
 .env
@@ -35,3 +36,17 @@ data_cache/
 # Temporary
 tmp/
 temp/
+
+# Archive (intermediate results, old notebooks, benchmarks)
+archive/
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
