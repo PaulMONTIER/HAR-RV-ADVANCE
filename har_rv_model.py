@@ -324,7 +324,7 @@ class HARRVModel:
 
         elif self.model_type == 'elasticnet':
             return ElasticNet(
-                alpha=p.get('alpha', 0.1),
+                alpha=p.get('alpha', 0.01),
                 l1_ratio=p.get('l1_ratio', 0.5),
                 max_iter=5000
             )
